@@ -1,0 +1,14 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# data files
+*.csv
+*.xlsx
+
+# environment
+.env
+venv/
