@@ -47,21 +47,19 @@ The goals of this project are:
 4. Analyze model performance under different market conditions such as high- and low-volatility periods.
 5. Evaluate whether a hybrid neural-ensemble model outperforms standalone methods.
 
-## Planned Models
+## Planned Models (In discussion)
 ### Baseline Models
 - Naive / simple baseline
 - Linear Regression
-- XGBoost
 
 ### Advanced Models
-- LSTM
+- XGBoost
 - Hybrid LSTM-XGBoost
 
-## Evaluation Metrics
+## Evaluation Metrics (In discussion)
 We plan to evaluate model performance using:
-- **MAE** (Mean Absolute Error)
-- **RMSE** (Root Mean Squared Error)
-- **Directional Accuracy** (optional, for up/down movement prediction)
+- **MAPE** (Mean Absolute Percentage Error)
+
 
 ## Project Structure
 ```text
