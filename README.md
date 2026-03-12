@@ -42,10 +42,9 @@ Typical columns include:
 ## Project Goals
 The goals of this project are:
 1. Preprocess and explore financial time series data.
-2. Engineer useful technical indicators and lag-based features.
-3. Build and compare different machine learning models for stock prediction.
-4. Analyze model performance under different market conditions such as high- and low-volatility periods.
-5. Evaluate whether a hybrid neural-ensemble model outperforms standalone methods.
+2. Engineer useful technical indicators and lag-based features (possibly).
+3. Build and tune different machine learning models for stock prediction such as XGBoost, LSTM+XGBoost, etc.
+4. Evaluate and compare model performance on stock price prediction
 
 ## Planned Models (In discussion)
 ### Baseline Models
