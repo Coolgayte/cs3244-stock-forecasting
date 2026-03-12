@@ -69,23 +69,24 @@ cs3244-stock-forecasting/
 │   ├── raw/
 │   └── processed/
 │
+├── models/
+│
 ├── notebooks/
 │   ├── eda.ipynb
 │   ├── feature_engineering.ipynb
-│
-├── src/
-│   ├── preprocessing.py
-│   ├── features.py
-│   ├── train_xgboost.py
-│   ├── train_lstm.py
-│   ├── hybrid_model.py
-│   ├── evaluate.py
 │
 ├── results/
 │   ├── plots/
 │   └── metrics/
 │
-├── models/
-├── requirements.txt
+├── src/
+│   ├── preprocessing.py
+│   ├── features.py
+│   ├── train_xgboost.py
+│   ├── train_lstm_xgboost.py
+│   ├── hybrid_model.py
+│   ├── evaluate.py (To Be Considered)
+│
 ├── .gitignore
-└── README.md
+├── README.md
+└── requirements.txt
