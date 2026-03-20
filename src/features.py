@@ -10,8 +10,8 @@ import pandas as pd
 
 # Define project paths relative to this script so teammates can run it from anywhere.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = PROJECT_ROOT / "Stock Selection" / "top_volume_stocks"
-OUT_DIR = Path(__file__).resolve().parent
+RAW_DIR = PROJECT_ROOT / "data" / "top_volume_stocks"
+OUT_DIR = PROJECT_ROOT / "data"
 ENG_DIR = OUT_DIR / "top_volume_stocks_eng_v2"
 BUCKET_RAW_PATH = OUT_DIR / "bucket_top_vol_v2_2009_2017.csv"
 BUCKET_ENG_PATH = OUT_DIR / "bucket_top_vol_eng_v2_2009_2017.csv"
