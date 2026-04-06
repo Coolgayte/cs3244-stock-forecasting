@@ -1,0 +1,126 @@
+Ticker,Name,Sector,Description
+XOM,Exxon Mobil Corporation,Energy,Integrated oil and gas supermajor
+CVX,Chevron Corporation,Energy,Integrated oil and gas supermajor
+SHEL,Shell plc,Energy,Global integrated energy major
+TTE,TotalEnergies SE,Energy,"Integrated oil, gas, and power company"
+COP,ConocoPhillips,Energy,Large independent exploration and production company
+ENB,Enbridge Inc.,Energy,North American pipeline and energy infrastructure operator
+BP,BP p.l.c.,Energy,Integrated oil and gas major
+CNQ,Canadian Natural Resources Limited,Energy,Diversified upstream oil and gas producer
+EQNR,Equinor ASA,Energy,Integrated energy company with large offshore exposure
+WMB,"The Williams Companies, Inc.",Energy,Natural gas pipeline and midstream operator
+EPD,Enterprise Products Partners L.P.,Energy,Midstream pipeline and NGL infrastructure partnership
+KMI,"Kinder Morgan, Inc.",Energy,Pipeline and energy infrastructure company
+SU,Suncor Energy Inc.,Energy,Integrated oil sands and refining company
+EOG,"EOG Resources, Inc.",Energy,Independent shale-focused oil and gas producer
+SLB,SLB N.V.,Energy,Oilfield services and energy technology provider
+VLO,Valero Energy Corporation,Energy,Independent refining and fuels producer
+OXY,Occidental Petroleum Corporation,Energy,Upstream oil and gas producer with chemicals exposure
+OKE,"ONEOK, Inc.",Energy,Midstream natural gas and NGL operator
+LNG,"Cheniere Energy, Inc.",Energy,LNG export and natural gas infrastructure company
+EQT,EQT Corporation,Energy,Large natural gas producer
+HAL,Halliburton Company,Energy,Oilfield services and drilling technology provider
+DVN,Devon Energy Corporation,Energy,U.S. exploration and production company
+APA,APA Corporation,Energy,Upstream oil and gas producer
+MUR,Murphy Oil Corporation,Energy,Independent oil and gas producer
+NOV,NOV Inc.,Energy,Energy equipment and oilfield technology provider
+JPM,JPMorgan Chase & Co.,Banks,Global money-center bank
+BAC,Bank of America Corporation,Banks,Large universal bank and wealth manager
+HSBC,HSBC Holdings plc,Banks,Global bank with major Asia and Europe exposure
+WFC,Wells Fargo & Company,Banks,Diversified U.S. banking and consumer finance group
+RY,Royal Bank of Canada,Banks,Large North American universal bank
+C,Citigroup Inc.,Banks,Global corporate and consumer banking group
+MUFG,"Mitsubishi UFJ Financial Group, Inc.",Banks,Japan-based global banking group
+SAN,"Banco Santander, S.A.",Banks,International retail and commercial bank
+TD,The Toronto-Dominion Bank,Banks,Major Canadian bank with U.S. operations
+HDB,HDFC Bank Limited,Banks,Large Indian private-sector bank
+SMFG,"Sumitomo Mitsui Financial Group, Inc.",Banks,Japan-based multinational banking group
+BBVA,"Banco Bilbao Vizcaya Argentaria, S.A.",Banks,Spanish international banking group
+UBS,UBS Group AG,Banks,Global bank focused on wealth and asset management
+BMO,Bank of Montreal,Banks,Large Canadian bank with commercial banking exposure
+IBN,ICICI Bank Limited,Banks,Large Indian universal bank
+ITUB,Itaú Unibanco Holding S.A.,Banks,Leading Latin American banking group
+CM,Canadian Imperial Bank of Commerce,Banks,Major Canadian retail and commercial bank
+BNS,The Bank of Nova Scotia,Banks,Canadian bank with international retail exposure
+PNC,"The PNC Financial Services Group, Inc.",Banks,Large regional bank with national corporate banking reach
+USB,U.S. Bancorp,Banks,Large regional bank and payments provider
+BK,The Bank of New York Mellon Corporation,Banks,Custody bank and investment-services provider
+ING,ING Groep N.V.,Banks,European bank with retail and commercial focus
+LYG,Lloyds Banking Group plc,Banks,Large U.K. retail and commercial bank
+BCS,Barclays PLC,Banks,Global bank with investment banking operations
+TFC,Truist Financial Corporation,Banks,Large regional bank with corporate banking exposure
+AMZN,"Amazon.com, Inc.",Retail,E-commerce and digital retail platform
+WMT,Walmart Inc.,Retail,Big-box retail and grocery giant
+COST,Costco Wholesale Corporation,Retail,Membership warehouse retail chain
+HD,"Home Depot, Inc. (The)",Retail,Home improvement retail leader
+TJX,"TJX Companies, Inc. (The)",Retail,Off-price apparel and home fashions retailer
+LOW,"Lowe's Companies, Inc.",Retail,Home improvement and hardware retailer
+CVS,CVS Health Corporation,Retail,"Pharmacy, health-services, and front-store retailer"
+ORLY,"O'Reilly Automotive, Inc.",Retail,Auto parts retail chain
+ROST,"Ross Stores, Inc.",Retail,Off-price apparel and home retailer
+AZO,"AutoZone, Inc.",Retail,Auto replacement-parts retailer
+TGT,Target Corporation,Retail,General merchandise and grocery retailer
+KR,Kroger Company (The),Retail,Supermarket and food retail chain
+EBAY,eBay Inc.,Retail,Online marketplace operator
+CASY,"Caseys General Stores, Inc.",Retail,Convenience store and fuel retailer
+TSCO,Tractor Supply Company,Retail,Rural lifestyle and farm retail chain
+ULTA,"Ulta Beauty, Inc.",Retail,Beauty products and salon retailer
+WSM,"Williams-Sonoma, Inc.",Retail,Home furnishings and kitchenware retailer
+DLTR,"Dollar Tree, Inc.",Retail,Value-oriented discount retailer
+DKS,Dick's Sporting Goods Inc,Retail,Sporting goods retail chain
+BBY,"Best Buy Co., Inc.",Retail,Consumer electronics retailer
+GME,GameStop Corporation,Retail,Video game and gaming-products retailer
+GAP,"Gap, Inc. (The)",Retail,Apparel retail group
+DDS,"Dillard's, Inc.",Retail,Department store retailer
+AN,"AutoNation, Inc.",Retail,Automotive dealership and vehicle retailer
+KMX,CarMax Inc,Retail,Used-car retail chain
+NVDA,NVIDIA Corporation,Tech,"Graphics, AI, and accelerated computing company"
+AAPL,Apple Inc.,Tech,Consumer hardware and software ecosystem leader
+MSFT,Microsoft Corporation,Tech,"Enterprise software, cloud, and productivity platform"
+MU,"Micron Technology, Inc.",Tech,Memory and storage semiconductor maker
+ORCL,Oracle Corporation,Tech,"Database, enterprise software, and cloud company"
+AMD,"Advanced Micro Devices, Inc.",Tech,CPU and GPU semiconductor designer
+CSCO,"Cisco Systems, Inc.",Tech,Networking hardware and enterprise infrastructure provider
+LRCX,Lam Research Corporation,Tech,Semiconductor equipment manufacturer
+AMAT,"Applied Materials, Inc.",Tech,Semiconductor manufacturing equipment supplier
+IBM,International Business Machines Corporation,Tech,"Enterprise IT, software, and consulting company"
+INTC,Intel Corporation,Tech,CPU and semiconductor manufacturing company
+KLAC,KLA Corporation,Tech,Semiconductor process control and inspection company
+CRM,"Salesforce, Inc.",Tech,Cloud CRM and enterprise software company
+TXN,Texas Instruments Incorporated,Tech,Analog and embedded semiconductor manufacturer
+ADI,"Analog Devices, Inc.",Tech,Analog and mixed-signal chip maker
+QCOM,QUALCOMM Incorporated,Tech,Wireless chip and licensing company
+INTU,Intuit Inc.,Tech,Consumer and SMB financial software provider
+GLW,Corning Incorporated,Tech,Specialty glass and materials technology company
+ADBE,Adobe Inc.,Tech,"Creative, document, and marketing software company"
+ADP,"Automatic Data Processing, Inc.",Tech,Payroll and HR software services provider
+SNPS,"Synopsys, Inc.",Tech,Chip design software and IP provider
+CDNS,"Cadence Design Systems, Inc.",Tech,Electronic design automation software company
+MSI,"Motorola Solutions, Inc.",Tech,Mission-critical communications and public-safety tech firm
+MPWR,"Monolithic Power Systems, Inc.",Tech,Power-management semiconductor designer
+ADSK,"Autodesk, Inc.",Tech,"Design, engineering, and CAD software company"
+KEX,Kirby Corporation,Shipping,Marine transportation and tank barge operator
+MATX,"Matson, Inc.",Shipping,Ocean shipping and logistics carrier
+SBLK,Star Bulk Carriers Corp.,Shipping,Dry bulk shipping company
+DAC,Danaos Corporation,Shipping,Container ship owner and operator
+NMM,Navios Maritime Partners L.P.,Shipping,Dry bulk and tanker shipping partnership
+SFL,SFL Corporation Ltd.,Shipping,Maritime asset owner and chartering company
+GSL,"Global Ship Lease, Inc.",Shipping,Container vessel charter owner
+GNK,Genco Shipping & Trading Limited,Shipping,Dry bulk vessel operator
+SB,"Safe Bulkers, Inc.",Shipping,Dry bulk shipping company
+ESEA,Euroseas Ltd.,Shipping,Container shipping operator
+GASS,StealthGas Inc.,Shipping,LPG carrier shipping company
+DSX,Diana Shipping Inc.,Shipping,Dry bulk shipping operator
+SHIP,Seanergy Maritime Holdings Corp.,Shipping,Capesize-focused dry bulk shipowner
+PANL,Pangaea Logistics Solutions Ltd.,Shipping,Dry bulk shipping and logistics firm
+SMHI,SEACOR Marine Holdings Inc.,Shipping,Offshore marine transportation services company
+FRO,Frontline plc,Shipping,Crude oil tanker shipping company
+STNG,Scorpio Tankers Inc.,Shipping,Product tanker shipping operator
+INSW,"International Seaways, Inc.",Shipping,Crude and product tanker company
+DHT,"DHT Holdings, Inc.",Shipping,VLCC tanker shipping company
+TRMD,TORM plc,Shipping,Product tanker shipping operator
+TNK,Teekay Tankers Ltd.,Shipping,Crude and product tanker owner
+GLNG,Golar LNG Limited,Shipping,LNG shipping and infrastructure company
+TK,Teekay Corporation Ltd.,Shipping,Marine transportation and energy shipping company
+NAT,Nordic American Tankers Limited,Shipping,Suezmax tanker shipping company
+TEN,Tsakos Energy Navigation Limited,Shipping,Tanker and LNG shipping operator
