@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
 
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import pandas as pd
 import seaborn as sns
 
@@ -77,7 +78,6 @@ def build_sector_daily(
     if panel_df.empty:
         raise ValueError("No rows left after date filtering. Check start_date/end_date.")
 
-    # Single groupby computes both chart metrics efficiently.
     sector_daily_all = (
         panel_df.groupby(["Date", "sector"], as_index=False)
         .agg(
@@ -136,75 +136,74 @@ def plot_stock_volatility_by_sector(
 ) -> Path:
     out_path = output_dir / "stock_volatility_by_sector_combined.png"
 
-    # Compute per-stock volatility, keep sector label
-    vol_df = (
+    # Compute per-stock volatility and keep one bar per stock.
+    stock_vol_df = (
         panel_df.groupby(["sector", "ticker"], as_index=False)["daily_return"]
         .std()
         .rename(columns={"daily_return": "volatility"})
-        .sort_values(["sector", "ticker"])   # sorted by sector first -> same-sector bars adjacent
-    )
-    # Ordered ticker list (sector-grouped) for x-axis
-    ticker_order = vol_df["ticker"].tolist()
-
-    # Sector average volatility (for horizontal reference lines)
-    sector_avg = vol_df.groupby("sector")["volatility"].mean()
-
-    # X-index boundaries per sector (to span the dashed line across only that sector's bars)
-    sector_x_ranges = {}
-    for sector, group in vol_df.groupby("sector", sort=False):
-        idxs = [ticker_order.index(t) for t in group["ticker"]]
-        sector_x_ranges[sector] = (min(idxs) - 0.4, max(idxs) + 0.4)
-
-    fig, ax = plt.subplots(figsize=(16, 8))
-    sns.barplot(
-        data=vol_df,
-        x="ticker",
-        y="volatility",
-        hue="sector",
-        order=ticker_order,
-        dodge=False,
-        ax=ax,
+        .dropna(subset=["volatility"])
+        .sort_values(["sector", "volatility", "ticker"], ascending=[True, False, True])
     )
 
-    # Draw a dashed horizontal line at the sector-average volatility.
-    # Darken the bar color so the line is clearly visible against the bars.
-    palette = {
-        handle.get_label(): handle.get_facecolor()
-        for handle in ax.legend_.legend_handles
-    }
-    for sector, avg_val in sector_avg.items():
-        bar_color = palette.get(sector, "gray")
-        # Darken by scaling RGB channels to 50% of original
-        r, g, b, *_ = mcolors.to_rgba(bar_color)
-        line_color = (r * 0.5, g * 0.5, b * 0.5)
-        x_start, x_end = sector_x_ranges[sector]
+    if stock_vol_df.empty:
+        raise ValueError("No valid volatility values to plot.")
+
+    sectors = stock_vol_df["sector"].unique().tolist()
+    palette_colors = sns.color_palette("Set2", n_colors=len(sectors))
+    sector_palette = dict(zip(sectors, palette_colors))
+
+    x_positions = []
+    vol_values = []
+    bar_colors = []
+    sector_centers = {}
+    sector_boundaries = []
+    sector_ranges = {}
+
+    x_cursor = 0
+    sector_gap = 2
+    for sector, group in stock_vol_df.groupby("sector", sort=False):
+        n_bars = len(group)
+        xs = list(range(x_cursor, x_cursor + n_bars))
+
+        x_positions.extend(xs)
+        vol_values.extend(group["volatility"].tolist())
+        bar_colors.extend([sector_palette[sector]] * n_bars)
+        sector_centers[sector] = (xs[0] + xs[-1]) / 2
+        sector_ranges[sector] = (xs[0] - 0.4, xs[-1] + 0.4)
+
+        sector_boundaries.append(xs[-1] + 0.5)
+        x_cursor = xs[-1] + 1 + sector_gap
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar(x_positions, vol_values, color=bar_colors, width=0.85, alpha=0.9)
+
+    sector_avg = stock_vol_df.groupby("sector")["volatility"].mean()
+    for sector, avg_vol in sector_avg.items():
+        x_start, x_end = sector_ranges[sector]
         ax.hlines(
-            y=avg_val,
+            y=avg_vol,
             xmin=x_start,
             xmax=x_end,
-            colors=line_color,
+            color="black",
             linestyle="--",
-            lw=2.5,
-            alpha=0.9,
-        )
-        ax.text(
-            x=(x_start + x_end) / 2,
-            y=avg_val*1.02,
-            s=f"{sector} Avg",
-            color=line_color,
-            va="bottom",
-            ha="center",
-            fontsize=8,
-            fontweight="bold",
+            linewidth=1.4,
+            alpha=0.75,
         )
 
+    ax.set_xticks(list(sector_centers.values()))
+    ax.set_xticklabels(list(sector_centers.keys()), rotation=20)
+
+    legend_handles = [Patch(facecolor=sector_palette[s], label=s) for s in sectors]
+    legend_handles.append(
+        Line2D([0], [0], color="black", linestyle="--", linewidth=1.6, label="Sector Avg")
+    )
+    ax.legend(handles=legend_handles, title="Sector", loc="upper right")
+
     ax.set(
-        title="Volatility by Stock (Std Dev of Daily Returns)",
-        xlabel="Ticker",
+        title="Stock Volatility by Sector (Each Bar = One Stock)",
+        xlabel="Sector",
         ylabel="Volatility",
     )
-    ax.tick_params(axis="x", rotation=45)
-    ax.legend(title="Sector", loc="upper right")
     ax.grid(axis="y", alpha=0.2)
     plt.tight_layout()
     plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
