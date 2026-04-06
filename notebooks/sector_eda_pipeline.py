@@ -45,6 +45,8 @@ def load_sector_panel(cfg: BucketEdaConfig) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
     for sector_dir in sector_dirs:
         sector_name = sector_dir.name
+        csv_files = list(sector_dir.glob("*.csv"))
+        print(f"Folder {sector_dir.name} has {len(csv_files)} file CSV.")
         for csv_path in sorted(sector_dir.glob("*.csv")):
             stock_df = prepare_stock_data(pd.read_csv(csv_path))
             if stock_df.empty:
@@ -237,7 +239,7 @@ def parse_args() -> BucketEdaConfig:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=project_root / "data" / "raw" / "sector_stocks",
+        default=project_root / "data" ,
         help="Root folder containing one folder per sector, each with CSV files",
     )
     parser.add_argument(
