@@ -28,14 +28,22 @@ def prepare_stock_data(df: pd.DataFrame) -> pd.DataFrame:
     stock_df["Close"] = pd.to_numeric(stock_df["Close"], errors="coerce")
     stock_df = stock_df.dropna(subset=["Date", "Close"]).sort_values("Date").reset_index(drop=True)
 
-    if stock_df.empty:
-        return pd.DataFrame(columns=["Date", "Close", "normalized_price", "daily_return"])
+    return stock_df
 
-    first_close = stock_df["Close"].iloc[0]
-    stock_df["normalized_price"] = stock_df["Close"] / first_close
-    stock_df["daily_return"] = stock_df["Close"].pct_change()
-    return stock_df[["Date", "normalized_price", "daily_return"]]
-
+def compute_window_features(panel_df: pd.DataFrame) -> pd.DataFrame:
+    # panel_df is already filtered to [start_date, end_date]
+    df = panel_df.sort_values(["sector", "ticker", "Date"]).copy()
+    
+    # Rebase each stock to its first close inside the selected window
+    first_close = df.groupby(["sector", "ticker"])["Close"].transform("first")
+    df = df[first_close != 0].copy() # avoid divide by zero
+    first_close = df.groupby(["sector", "ticker"])["Close"].transform("first")
+    
+    df["normalized_price"] = df["Close"] / first_close
+    df["daily_return"] = df.groupby(["sector", "ticker"])["Close"].pct_change()
+    
+    return df[["Date", "sector", "ticker", "normalized_price", "daily_return"]]
+   
 
 def load_sector_panel(cfg: BucketEdaConfig) -> pd.DataFrame:
     # Expected structure: data_dir/<sector_name>/*.csv
@@ -63,21 +71,11 @@ def load_sector_panel(cfg: BucketEdaConfig) -> pd.DataFrame:
         )
 
     panel_df = pd.concat(frames, ignore_index=True)
-    return panel_df.sort_values(["Date", "sector", "ticker"]).reset_index(drop=True)
-
+    return panel_df.sort_values(["Date", "sector", "ticker"]).reset_index(drop=True) 
 
 def build_sector_daily(
     panel_df: pd.DataFrame,
-    start_date: str,
-    end_date: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    start_ts = pd.Timestamp(start_date)
-    end_ts = pd.Timestamp(end_date)
-
-    panel_df = panel_df[(panel_df["Date"] >= start_ts) & (panel_df["Date"] <= end_ts)].copy()
-    if panel_df.empty:
-        raise ValueError("No rows left after date filtering. Check start_date/end_date.")
-
     sector_daily_all = (
         panel_df.groupby(["Date", "sector"], as_index=False)
         .agg(
@@ -156,7 +154,6 @@ def plot_stock_volatility_by_sector(
     vol_values = []
     bar_colors = []
     sector_centers = {}
-    sector_boundaries = []
     sector_ranges = {}
 
     x_cursor = 0
@@ -170,8 +167,6 @@ def plot_stock_volatility_by_sector(
         bar_colors.extend([sector_palette[sector]] * n_bars)
         sector_centers[sector] = (xs[0] + xs[-1]) / 2
         sector_ranges[sector] = (xs[0] - 0.4, xs[-1] + 0.4)
-
-        sector_boundaries.append(xs[-1] + 0.5)
         x_cursor = xs[-1] + 1 + sector_gap
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -216,17 +211,21 @@ def run_pipeline(cfg: BucketEdaConfig) -> Tuple[Path, Path]:
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
     panel_df = load_sector_panel(cfg)
+    panel_df_filtered = panel_df[
+        (panel_df["Date"] >= pd.Timestamp(cfg.start_date))
+        & (panel_df["Date"] <= pd.Timestamp(cfg.end_date))
+    ].copy()
+    panel_with_features = compute_window_features(panel_df_filtered)
+    
     sector_daily_all, sector_daily_intersection = build_sector_daily(
-        panel_df,
-        cfg.start_date,
-        cfg.end_date,
+        panel_with_features,
     )
     chart_1 = plot_avg_normalized_price_by_sector(
         sector_daily_intersection,
         cfg.output_dir,
         cfg.dpi,
     )
-    chart_2 = plot_stock_volatility_by_sector(panel_df, cfg.output_dir, cfg.dpi)
+    chart_2 = plot_stock_volatility_by_sector(panel_with_features, cfg.output_dir, cfg.dpi)
     return chart_1, chart_2
 
 
