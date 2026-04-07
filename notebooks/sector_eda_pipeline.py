@@ -188,11 +188,10 @@ def plot_stock_volatility_by_sector(
     ax.set_xticks(list(sector_centers.values()))
     ax.set_xticklabels(list(sector_centers.keys()), rotation=20)
 
-    legend_handles = [Patch(facecolor=sector_palette[s], label=s) for s in sectors]
-    legend_handles.append(
-        Line2D([0], [0], color="black", linestyle="--", linewidth=1.6, label="Sector Avg")
+    ax.legend(
+        handles=[Line2D([0], [0], color="black", linestyle="--", linewidth=1.6, label="Sector Average")],
+        loc="upper right",
     )
-    ax.legend(handles=legend_handles, title="Sector", loc="upper right")
 
     ax.set(
         title="Stock Volatility by Sector (Each Bar = One Stock)",
