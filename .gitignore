@@ -12,3 +12,9 @@ __pycache__/
 # environment
 .env
 venv/
+
+# allow tracked/generated project outputs that the team needs for modeling
+!data/processed/**/*.csv
+!data/processed/**/*.json
+!data/processed/**/*.txt
+!data/processed/**/*.log
