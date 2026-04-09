@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from pipeline import (
+from features import (
     END_DATE,
     MIN_RETAINED_FRACTION,
     START_DATE,
@@ -17,8 +17,9 @@ from pipeline import (
 
 # Reuse the same indicator logic as the top-volume pipeline so sector analysis stays comparable.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SECTOR_RAW_ROOT = PROJECT_ROOT / "Stock Selection" / "sector_stocks"
-SECTOR_OUT_ROOT = Path(__file__).resolve().parent / "sector_stocks_eng"
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+SECTOR_RAW_ROOT = PROCESSED_DIR / "sector_stocks"
+SECTOR_OUT_ROOT = PROCESSED_DIR / "sector_stocks_eng"
 
 
 def process_sector(sector_dir: Path, out_root: Path) -> list[dict]:

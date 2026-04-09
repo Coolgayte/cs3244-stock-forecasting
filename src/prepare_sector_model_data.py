@@ -18,9 +18,10 @@ from prepare_model_data import (
 )
 
 # Package each sector into the same split/target format as top-volume data.
-FEATURE_DIR = Path(__file__).resolve().parent
-SECTOR_ENG_ROOT = FEATURE_DIR / "sector_stocks_eng"
-OUT_ROOT = FEATURE_DIR / "model_ready_sectors"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+SECTOR_ENG_ROOT = PROCESSED_DIR / "sector_stocks_eng"
+OUT_ROOT = PROCESSED_DIR / "model_ready_sectors"
 
 
 def load_sector_bucket(path: Path) -> pd.DataFrame:

@@ -6,13 +6,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from pipeline import ENGINEERED_COLS
+from features import ENGINEERED_COLS
 
 # Define paths relative to this script so teammates can run it from the project root.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-FEATURE_DIR = Path(__file__).resolve().parent
-ENGINEERED_BUCKET_PATH = FEATURE_DIR / "bucket_top_vol_eng_2009_2017.csv"
-OUT_DIR = FEATURE_DIR / "model_ready_top_volume"
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+ENGINEERED_BUCKET_PATH = PROCESSED_DIR / "bucket_top_vol_eng_2009_2017.csv"
+OUT_DIR = PROCESSED_DIR / "model_ready_top_volume"
 
 # Keep the training split strictly chronological to avoid leakage.
 TRAIN_END = pd.Timestamp("2014-12-31")
