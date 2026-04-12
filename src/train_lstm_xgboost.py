@@ -1,9 +1,15 @@
 """
 LSTM-XGBoost hybrid training & evaluation pipeline.
 
-LSTM encodes raw OHLCV sequences → latent h_T.
-h_T ⊕ indicator features ⊕ categorical ticker → XGBoost (Optuna-tuned).
-Target: next-day log return (target_log_return_1d).
+Reads UNSCALED train.csv / val.csv / test.csv and applies per-window
+self-normalization inside build_sequences (reference sequences.py style):
+  - OHLC: each column divided by its own day-0 value, minus 1
+  - Volume: divided by day-0 Volume, minus 1, clipped to [-5, 5]
+  - Indicators (rsi_14, macd_*, ema_50_200_ratio, bb_width) used as-is
+    (already stationary / bounded by construction)
+
+LSTM predicts target_log_return_1d directly (raw log return; no inverse scaling).
+h_T ⊕ indicators @ t ⊕ ticker (categorical) → XGBoost (Optuna-tuned).
 """
 from __future__ import annotations
 import json, pickle, logging
@@ -21,10 +27,11 @@ XGB_EXTRA_FEATURES = ["log_return", "rsi_14", "macd_line", "macd_hist",
                       "ema_50_200_ratio", "bb_width"]
 EXCLUDE = {"atr_14", "obv", "vwap"}
 
-HIDDEN_SIZE, NUM_LAYERS, DROPOUT = 16, 2, 0.0
+HIDDEN_SIZE, NUM_LAYERS, DROPOUT = 64, 2, 0.2
 SEQ_LEN, BATCH_SIZE = 30, 256
-LSTM_EPOCHS, LSTM_LR, ES_PATIENCE = 200, 1e-3, 50
-OPTUNA_TRIALS = 200
+LSTM_EPOCHS, LSTM_LR, ES_PATIENCE = 200, 1e-3, 20
+WEIGHT_DECAY, GRAD_CLIP = 1e-5, 1.0
+OPTUNA_TRIALS = 100
 TARGET_COL, PRICE_COL, TICKER_COL = "target_log_return_1d", "Close", "ticker"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SEED = 42
@@ -54,49 +61,85 @@ class LSTMForecaster(nn.Module):
         super().__init__()
         self.lstm = nn.LSTM(input_size, HIDDEN_SIZE, num_layers=NUM_LAYERS,
             dropout=DROPOUT if NUM_LAYERS > 1 else 0.0, batch_first=True)
+        # Head predicts the next-day log return directly (no price reconstruction here)
         self.head = nn.Linear(HIDDEN_SIZE, 1)
     def encode(self, x):
         _, (h, _) = self.lstm(x); return h[-1]
     def forward(self, x):
         return self.head(self.encode(x)).squeeze(-1)
 
-# ─── Sequence builder ────────────────────────────────────────────────────
+# ─── Per-window self-normalization sequence builder ─────────────────────
 def build_sequences(df, lstm_feats, extra_feats, target_col, seq_len):
+    """
+    For each ticker, slide a `seq_len` window and self-normalize:
+      - Price cols (OHLC): (price / day-0 price) - 1  [per column]
+      - Volume col:        (vol / day-0 vol) - 1, clipped to [-5, 5]
+      - Indicators (extra_feats): taken at the last window day, used as-is
+
+    Returns: X_seq (N,T,F_lstm), X_extra (N,F_extra), y, row_idx, tickers.
+    """
     Xs, Xe, y, idx, tks = [], [], [], [], []
     has = TICKER_COL in df.columns
     groups = df.groupby(TICKER_COL, sort=False) if has else [("_", df)]
+    price_cols = [c for c in lstm_feats if c != "Volume"]
+    has_vol = "Volume" in lstm_feats
+    eps = 1e-8
+
     for name, g in groups:
         g = g.reset_index(drop=False).rename(columns={"index": "_orig_idx"})
-        seq_arr   = g[lstm_feats].to_numpy(np.float32)
-        extra_arr = g[extra_feats].to_numpy(np.float32) if extra_feats else np.zeros((len(g),0),np.float32)
+        price_arr = g[price_cols].to_numpy(np.float32) if price_cols else np.zeros((len(g), 0), np.float32)
+        vol_arr   = g["Volume"].to_numpy(np.float32) if has_vol else None
+        extra_arr = g[extra_feats].to_numpy(np.float32) if extra_feats else np.zeros((len(g), 0), np.float32)
         tgt       = g[target_col].to_numpy(np.float32)
         orig      = g["_orig_idx"].to_numpy()
+
         for i in range(seq_len, len(g)):
             if np.isnan(tgt[i]): continue
-            Xs.append(seq_arr[i-seq_len:i]); Xe.append(extra_arr[i])
-            y.append(tgt[i]); idx.append(orig[i]); tks.append(name)
+
+            # Price normalization: each column by its own day-0 value
+            wp     = price_arr[i-seq_len:i].copy()   # (seq_len, n_price_cols)
+            base_p = wp[0] + eps                      # (n_price_cols,)
+            norm_p = (wp / base_p) - 1
+
+            if has_vol:
+                wv     = vol_arr[i-seq_len:i].copy()  # (seq_len,)
+                base_v = wv[0] + eps
+                norm_v = np.clip((wv / base_v) - 1, -5.0, 5.0)
+                window = np.column_stack((norm_p, norm_v))
+            else:
+                window = norm_p
+
+            if not np.all(np.isfinite(window)): continue
+
+            Xs.append(window)
+            Xe.append(extra_arr[i])       # indicators at prediction day (today)
+            y.append(tgt[i])              # next-day log return
+            idx.append(orig[i])
+            tks.append(name)
+
     return (np.asarray(Xs), np.asarray(Xe), np.asarray(y, np.float32),
             np.asarray(idx), np.asarray(tks))
 
 # ─── LSTM training ───────────────────────────────────────────────────────
 def train_lstm(model, tr_loader, va_loader, tag):
-    opt = torch.optim.Adam(model.parameters(), lr=LSTM_LR, weight_decay=1e-5)
+    opt = torch.optim.Adam(model.parameters(), lr=LSTM_LR, weight_decay=WEIGHT_DECAY)
+    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min",
+        factor=0.5, patience=5, min_lr=1e-6)
     loss_fn = nn.MSELoss()
     best, best_state, bad = float("inf"), None, 0
     for epoch in range(1, LSTM_EPOCHS + 1):
         model.train(); tr_losses = []
         for xb, yb in tr_loader:
-          xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-          opt.zero_grad()
-          l = loss_fn(model(xb), yb)
-          l.backward()
-          torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # ← add this
-          opt.step()
-          tr_losses.append(l.item())
+            xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+            opt.zero_grad()
+            l = loss_fn(model(xb), yb); l.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP)
+            opt.step(); tr_losses.append(l.item())
         model.eval()
         with torch.no_grad():
             vl = float(np.mean([loss_fn(model(xb.to(DEVICE)), yb.to(DEVICE)).item()
                                 for xb, yb in va_loader]))
+        sched.step(vl)
         tr = float(np.mean(tr_losses)); mark = ""
         if vl < best - 1e-6:
             best, bad = vl, 0
@@ -104,7 +147,9 @@ def train_lstm(model, tr_loader, va_loader, tag):
             mark = "  *"
         else:
             bad += 1
-        log.info(f"[{tag}] epoch {epoch:02d}/{LSTM_EPOCHS}  train_mse={tr:.6f}  val_mse={vl:.6f}{mark}")
+        cur_lr = opt.param_groups[0]["lr"]
+        log.info(f"[{tag}] epoch {epoch:03d}/{LSTM_EPOCHS}  "
+                 f"train_mse={tr:.6f}  val_mse={vl:.6f}  lr={cur_lr:.1e}{mark}")
         if bad >= ES_PATIENCE:
             log.info(f"[{tag}] early stop @ epoch {epoch} (best val_mse={best:.6f})"); break
     if best_state: model.load_state_dict(best_state)
@@ -146,17 +191,30 @@ def tune_xgb(Xtr, ytr, Xva, yva, tag):
     log.info(f"[{tag}] best_val_mse={study.best_value:.6f}  params={study.best_params}")
     return study.best_params
 
-# ─── Metrics & plots ─────────────────────────────────────────────────────
+# ─── Metrics, baselines & plots ──────────────────────────────────────────
 def compute_metrics(y_true_lr, y_pred_lr, base_close, true_price):
     pred_price = base_close * np.exp(y_pred_lr)
     ss_res = np.sum((true_price - pred_price) ** 2)
     ss_tot = np.sum((true_price - np.mean(true_price)) ** 2)
     return {
         "mse_log_return": float(np.mean((y_true_lr - y_pred_lr) ** 2)),
+        "r2_log_return":  float(1 - np.sum((y_true_lr - y_pred_lr)**2) /
+                                    np.sum((y_true_lr - np.mean(y_true_lr))**2))
+                          if np.var(y_true_lr) > 0 else float("nan"),
         "r2_price": float(1 - ss_res/ss_tot) if ss_tot > 0 else float("nan"),
         "mape_price": float(np.mean(np.abs((true_price-pred_price)/true_price))*100),
         "directional_accuracy": float(np.mean(np.sign(y_true_lr)==np.sign(y_pred_lr))*100),
     }, pred_price
+
+def baseline_metrics(tickers, y_true):
+    df = pd.DataFrame({"t": tickers, "yt": y_true})
+    df["yt_prev"] = df.groupby("t")["yt"].shift(1)
+    df = df.dropna()
+    return {
+        "naive_zero_mse": float(np.mean(df.yt**2)),
+        "naive_momentum_mse": float(np.mean((df.yt - df.yt_prev)**2)),
+        "naive_momentum_da": float(np.mean(np.sign(df.yt)==np.sign(df.yt_prev))*100),
+    }
 
 def plot_reconstruction(name, tickers, true_price, pred_price, outdir):
     outdir.mkdir(parents=True, exist_ok=True)
@@ -181,41 +239,29 @@ def plot_reconstruction(name, tickers, true_price, pred_price, outdir):
     ax.set_title(f"{name}: predicted vs actual"); ax.grid(alpha=0.3)
     fig.savefig(outdir/f"{name}_scatter.png", dpi=130, bbox_inches="tight"); plt.close(fig)
 
-# ─── Helpers ─────────────────────────────────────────────────────────────
-def stats_index_col(folder):
-    cols = pd.read_csv(folder/"scaler_stats.csv", nrows=0).columns.tolist()
-    for c in ("feature","column","name","Unnamed: 0"):
-        if c in cols: return c
-    return cols[0]
-
 # ─── Per-dataset ─────────────────────────────────────────────────────────
 def run_dataset(name, folder):
     log.info(f"===== {name} =====")
     torch.manual_seed(SEED); np.random.seed(SEED)
 
-    sample_cols = set(pd.read_csv(folder/"train_scaled.csv", nrows=0).columns)
+    # Read UNSCALED data; normalization is done per-window inside build_sequences
+    train_df = pd.read_csv(folder/"train.csv")
+    val_df   = pd.read_csv(folder/"val.csv")
+    test_df  = pd.read_csv(folder/"test.csv")
+
+    sample_cols = set(train_df.columns)
     lstm_feats  = [c for c in LSTM_FEATURES if c in sample_cols]
     if not lstm_feats:
-        raise ValueError(f"[{name}] no OHLCV columns in train_scaled.csv. Found: {sorted(sample_cols)}")
+        raise ValueError(f"[{name}] no OHLCV columns in train.csv. Found: {sorted(sample_cols)}")
     extra_feats = [c for c in XGB_EXTRA_FEATURES if c not in EXCLUDE and c in sample_cols]
-    log.info(f"[{name}] LSTM feats={lstm_feats}")
-    log.info(f"[{name}] XGB extras={extra_feats}")
+    if TARGET_COL not in sample_cols:
+        raise ValueError(f"[{name}] missing target column {TARGET_COL}")
+    log.info(f"[{name}] LSTM feats (self-normalized)={lstm_feats}")
+    log.info(f"[{name}] XGB extras (raw indicators)={extra_feats}")
 
-    stats = pd.read_csv(folder/"scaler_stats.csv").set_index(stats_index_col(folder))
-    if TARGET_COL in stats.index:
-        tgt_mean, tgt_std = float(stats.loc[TARGET_COL,"mean"]), float(stats.loc[TARGET_COL,"std"])
-    else:
-        log.info(f"[{name}] {TARGET_COL} not in scaler_stats; assuming unscaled target")
-        tgt_mean, tgt_std = 0.0, 1.0
-
-    train_s = pd.read_csv(folder/"train_scaled.csv")
-    val_s   = pd.read_csv(folder/"val_scaled.csv")
-    test_s  = pd.read_csv(folder/"test_scaled.csv")
-    test_r  = pd.read_csv(folder/"test.csv")
-
-    Xtr_s, Xtr_e, ytr, _,      tk_tr = build_sequences(train_s, lstm_feats, extra_feats, TARGET_COL, SEQ_LEN)
-    Xva_s, Xva_e, yva, _,      tk_va = build_sequences(val_s,   lstm_feats, extra_feats, TARGET_COL, SEQ_LEN)
-    Xte_s, Xte_e, yte, idx_te, tk_te = build_sequences(test_s,  lstm_feats, extra_feats, TARGET_COL, SEQ_LEN)
+    Xtr_s, Xtr_e, ytr, _,      tk_tr = build_sequences(train_df, lstm_feats, extra_feats, TARGET_COL, SEQ_LEN)
+    Xva_s, Xva_e, yva, _,      tk_va = build_sequences(val_df,   lstm_feats, extra_feats, TARGET_COL, SEQ_LEN)
+    Xte_s, Xte_e, yte, idx_te, tk_te = build_sequences(test_df,  lstm_feats, extra_feats, TARGET_COL, SEQ_LEN)
     log.info(f"[{name}] seqs: train={len(Xtr_s)} val={len(Xva_s)} test={len(Xte_s)}")
 
     tr_loader = DataLoader(TensorDataset(torch.from_numpy(Xtr_s), torch.from_numpy(ytr)),
@@ -242,20 +288,22 @@ def run_dataset(name, folder):
                        objective="reg:squarederror", n_jobs=-1, verbosity=0)
     xgb.fit(pd.concat([Dtr,Dva],ignore_index=True), np.concatenate([ytr,yva]))
 
-    y_pred = xgb.predict(Dte) * tgt_std + tgt_mean
-    y_true = yte * tgt_std + tgt_mean
+    # Predictions are raw log returns — no inverse scaling needed
+    y_pred = xgb.predict(Dte)
+    y_true = yte
 
-    base_close = test_r[PRICE_COL].to_numpy()[idx_te]
-    if "target_close_1d" in test_r.columns:
-        true_price = test_r["target_close_1d"].to_numpy()[idx_te]
+    base_close = test_df[PRICE_COL].to_numpy()[idx_te]
+    if "target_close_1d" in test_df.columns:
+        true_price = test_df["target_close_1d"].to_numpy()[idx_te]
     else:
-        true_price = test_r.groupby(TICKER_COL)[PRICE_COL].shift(-1).to_numpy()[idx_te]
+        true_price = test_df.groupby(TICKER_COL)[PRICE_COL].shift(-1).to_numpy()[idx_te]
 
     mask = ~np.isnan(true_price) & ~np.isnan(base_close)
     y_true, y_pred = y_true[mask], y_pred[mask]
     base_close, true_price, tk_plot = base_close[mask], true_price[mask], tk_te[mask]
 
     metrics, pred_price = compute_metrics(y_true, y_pred, base_close, true_price)
+    metrics.update(baseline_metrics(tk_plot, y_true))
     log.info(f"[{name}] metrics: {metrics}")
 
     plot_reconstruction(name, tk_plot, true_price, pred_price, FIGS)
@@ -265,7 +313,8 @@ def run_dataset(name, folder):
                 "config":dict(input_size=len(lstm_feats), hidden_size=HIDDEN_SIZE,
                               num_layers=NUM_LAYERS, dropout=DROPOUT, seq_len=SEQ_LEN,
                               lstm_features=lstm_feats, extra_features=extra_feats,
-                              target_col=TARGET_COL)},
+                              target_col=TARGET_COL,
+                              normalization="per_window_ratio_clipped")},
                mdir/"lstm.pt")
     with open(mdir/"xgb.pkl","wb") as f: pickle.dump(xgb,f)
     RESULTS.mkdir(parents=True, exist_ok=True)
