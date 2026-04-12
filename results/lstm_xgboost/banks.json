@@ -1,0 +1,18 @@
+{
+  "metrics": {
+    "mse_log_return": 0.0002735246380325407,
+    "r2_price": 0.9996646884450068,
+    "mape_price": 1.0660048514448528,
+    "directional_accuracy": 51.837179360206
+  },
+  "best_xgb_params": {
+    "n_estimators": 523,
+    "max_depth": 3,
+    "learning_rate": 0.005021211226419876,
+    "subsample": 0.6877579566829407,
+    "colsample_bytree": 0.6451770391584799,
+    "min_child_weight": 1,
+    "reg_alpha": 0.031228387064104416,
+    "reg_lambda": 5.655736889230135e-07
+  }
+}
