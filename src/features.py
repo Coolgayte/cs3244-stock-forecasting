@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import re
@@ -8,81 +7,91 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-# Define project paths relative to this script so teammates can run it from anywhere.
+# Keep the pipeline anchored to the agreed project folders.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = PROJECT_ROOT / "data" / "top_volume_stocks"
-OUT_DIR = PROJECT_ROOT / "data"
-ENG_DIR = OUT_DIR / "top_volume_stocks_eng_v2"
-BUCKET_RAW_PATH = OUT_DIR / "bucket_top_vol_v2_2009_2017.csv"
-BUCKET_ENG_PATH = OUT_DIR / "bucket_top_vol_eng_v2_2009_2017.csv"
-RUN_SUMMARY_PATH = OUT_DIR / "run_summary_v2.csv"
+OUT_DIR = PROJECT_ROOT / "data" / "processed"
+ENG_DIR = OUT_DIR / "top_volume_stocks_eng"
+BUCKET_RAW_PATH = OUT_DIR / "bucket_top_vol_2009_2017.csv"
+BUCKET_ENG_PATH = OUT_DIR / "bucket_top_vol_eng_2009_2017.csv"
+RUN_SUMMARY_PATH = OUT_DIR / "run_summary.csv"
 
-# Warm-up periods used by indicators
+# Window settings for the approved research period.
+START_DATE = pd.Timestamp("2009-01-01")
+END_DATE = pd.Timestamp("2017-12-31")
+MIN_RETAINED_FRACTION = 0.05
+
+# Indicator parameters.
 RSI_PERIOD = 14
 MACD_FAST = 12
 MACD_SLOW = 26
 MACD_SIGNAL = 9
 BB_WINDOW = 20
+ATR_PERIOD = 14
 EMA_SHORT = 50
 EMA_LONG = 200
 REQUIRED_COLS = {"Date", "Close", "Volume"}
-START_DATE = pd.Timestamp("2009-01-01")
-END_DATE = pd.Timestamp("2017-12-31")
-MIN_RETAINED_FRACTION = 0.05
+
+# Keep only representative features from each indicator family.
+ENGINEERED_COLS = [
+    "log_return",
+    "rsi_14",
+    "macd_line",
+    "macd_hist",
+    "ema_50_200_ratio",
+    "obv",
+    "vwap",
+    "bb_width",
+    "atr_14",
+]
 
 
 def normalize_ticker(file_path: Path) -> str:
     """Strip exchange suffixes and uppercase the ticker symbol."""
-    # Extract leading alphanumeric ticker portion before any non-alphanumeric characters or suffixes.
     match = re.match(r"([A-Za-z0-9]+)", file_path.name)
     ticker = match.group(1) if match else file_path.stem
     return ticker.upper()
 
 
 def read_stock_file(file_path: Path) -> pd.DataFrame:
-    """Read a single stock file (.csv or .txt) and return a DataFrame."""
+    """Read a single stock file (.csv or .txt) and parse the date column."""
     df = pd.read_csv(file_path)
     if "Date" in df.columns:
-        # Parse dates so time-based calculations work as expected.
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     return df
 
 
 def missing_required_columns(df: pd.DataFrame) -> List[str]:
-    # Check for core fields needed for indicators and validation.
+    """Return any required columns that are missing from the input file."""
     return [col for col in REQUIRED_COLS if col not in df.columns]
 
 
 def drop_duplicate_dates(df: pd.DataFrame) -> pd.DataFrame:
-    # Stable sort ensures deterministic ordering before deduplication.
+    """Use a stable sort so duplicate-date handling stays deterministic."""
     ordered = df.sort_values("Date", kind="mergesort")
     return ordered.drop_duplicates(subset=["Date"], keep="last")
 
 
-def compute_log_return(df: pd.DataFrame) -> pd.Series:
-    # Use natural log to stabilize variance and align with many ML models.
-    return np.log(df["Close"] / df["Close"].shift(1))
+def compute_log_return(close: pd.Series) -> pd.Series:
+    """Log return is a compact price-change feature for downstream models."""
+    return np.log(close / close.shift(1))
 
 
 def compute_rsi(close: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
-    # Calculate price changes between consecutive days.
+    """RSI captures short-horizon momentum using smoothed gains and losses."""
     delta = close.diff()
-
-    # Separate gains and losses; losses are stored as positive numbers for smoothing.
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
-    # Exponential smoothing with alpha=1/period (not SMA-seeded Wilder initialization).
     avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
 
     rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
 
 
 def compute_macd(close: pd.Series) -> pd.DataFrame:
-    # Exponential moving averages capture momentum with different speeds (12 fast vs 26 slow).
+    """Keep only representative MACD outputs to limit redundancy."""
     ema_fast = close.ewm(span=MACD_FAST, adjust=False).mean()
     ema_slow = close.ewm(span=MACD_SLOW, adjust=False).mean()
 
@@ -90,69 +99,88 @@ def compute_macd(close: pd.Series) -> pd.DataFrame:
     macd_signal = macd_line.ewm(span=MACD_SIGNAL, adjust=False).mean()
     macd_hist = macd_line - macd_signal
 
-    return pd.DataFrame({
-        "macd_line": macd_line,
-        "macd_signal": macd_signal,
-        "macd_hist": macd_hist,
-    })
+    return pd.DataFrame(
+        {
+            "macd_line": macd_line,
+            "macd_hist": macd_hist,
+        }
+    )
+
+
+def compute_ema_context(close: pd.Series) -> pd.Series:
+    """Use the short/long EMA ratio as the single trend-context feature."""
+    ema_50 = close.ewm(span=EMA_SHORT, adjust=False).mean()
+    ema_200 = close.ewm(span=EMA_LONG, adjust=False).mean()
+    return ema_50 / ema_200
+
+
+def compute_volume_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """Add OBV and VWAP to capture participation and price-volume interaction."""
+    close_delta = df["Close"].diff()
+    direction = np.sign(close_delta).fillna(0)
+    obv = (direction * df["Volume"]).cumsum()
+
+    typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
+    cumulative_price_volume = (typical_price * df["Volume"]).cumsum()
+    cumulative_volume = df["Volume"].cumsum().replace(0, np.nan)
+    vwap = cumulative_price_volume / cumulative_volume
+
+    return pd.DataFrame(
+        {
+            "obv": obv,
+            "vwap": vwap,
+        }
+    )
 
 
 def compute_bollinger(close: pd.Series) -> pd.DataFrame:
-    # 20-day simple moving average represents the mid-band; std measures typical deviation.
+    """Compress Bollinger bands into a single width feature to avoid redundancy."""
     mid = close.rolling(window=BB_WINDOW, min_periods=BB_WINDOW).mean()
     std = close.rolling(window=BB_WINDOW, min_periods=BB_WINDOW).std()
+    upper = mid + (2 * std)
+    lower = mid - (2 * std)
+    width = (upper - lower) / mid.replace(0, np.nan)
 
-    upper = mid + 2 * std
-    lower = mid - 2 * std
-    width = (upper - lower) / mid
-
-    return pd.DataFrame({
-        "bb_mid": mid,
-        "bb_std": std,
-        "bb_upper": upper,
-        "bb_lower": lower,
-        "bb_width": width,
-    })
+    return pd.DataFrame(
+        {
+            "bb_width": width,
+        }
+    )
 
 
-def compute_ema_context(close: pd.Series) -> pd.DataFrame:
-    # Long and short EMAs capture trend context; ratio summarizes their relative position.
-    ema_50 = close.ewm(span=EMA_SHORT, adjust=False).mean()
-    ema_200 = close.ewm(span=EMA_LONG, adjust=False).mean()
-    ratio = ema_50 / ema_200
+def compute_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> pd.Series:
+    """ATR uses true range decomposition to measure recent volatility."""
+    prev_close = df["Close"].shift(1)
+    high_low = df["High"] - df["Low"]
+    high_prev_close = (df["High"] - prev_close).abs()
+    low_prev_close = (df["Low"] - prev_close).abs()
 
-    return pd.DataFrame({
-        "ema_50": ema_50,
-        "ema_200": ema_200,
-        "ema_50_200_ratio": ratio,
-    })
+    true_range = pd.concat([high_low, high_prev_close, low_prev_close], axis=1).max(axis=1)
+    return true_range.rolling(window=period, min_periods=period).mean()
 
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    # Work on a copy to avoid mutating the caller's DataFrame.
-    out = df.copy()
+    """Build the pruned feature set, then drop rolling-window NaN rows."""
+    out = drop_duplicate_dates(df.copy())
 
-    # Indicators expect chronological order with one row per date.
-    out = drop_duplicate_dates(out)
-
-    # Core log return (first row becomes NaN by definition due to shift).
-    out["log_return"] = compute_log_return(out)
-
-    # RSI block with exponential smoothing.
+    # Base return and momentum features.
+    out["log_return"] = compute_log_return(out["Close"])
     out["rsi_14"] = compute_rsi(out["Close"], RSI_PERIOD)
+    out["ema_50_200_ratio"] = compute_ema_context(out["Close"])
 
-    # MACD block.
-    macd_df = compute_macd(out["Close"])
-    out = pd.concat([out, macd_df], axis=1)
+    # MACD family: keep the line and histogram, drop the redundant signal line.
+    out = pd.concat([out, compute_macd(out["Close"])], axis=1)
 
-    # Bollinger Bands block (rolling window introduces warm-up NaNs).
-    bb_df = compute_bollinger(out["Close"])
-    out = pd.concat([out, bb_df], axis=1)
+    # Volume features use both price and volume columns, so compute them together.
+    out = pd.concat([out, compute_volume_indicators(out)], axis=1)
 
-    # EMA context block (ewm starts immediately, so no warm-up NaNs beyond initial data).
-    ema_df = compute_ema_context(out["Close"])
-    out = pd.concat([out, ema_df], axis=1)
+    # Volatility block keeps two representatives: Bollinger width and ATR.
+    out = pd.concat([out, compute_bollinger(out["Close"])], axis=1)
+    out["atr_14"] = compute_atr(out, ATR_PERIOD)
 
+    # Remove only the leading rows made invalid by indicator windows.
+    required_for_model = list(REQUIRED_COLS) + ENGINEERED_COLS
+    out = out.dropna(subset=required_for_model).reset_index(drop=True)
     return out
 
 
@@ -160,7 +188,6 @@ def process_bucket(raw_dir: Path = RAW_DIR) -> None:
     if not raw_dir.exists() or not raw_dir.is_dir():
         raise FileNotFoundError(f"Input directory not found: {raw_dir}")
 
-    # Collect all stock files (csv or txt) in the target bucket directory.
     stock_files: List[Path] = [p for p in raw_dir.iterdir() if p.suffix.lower() in {".csv", ".txt"}]
     if len(stock_files) != 20:
         print(f"Warning: expected 20 stocks in bucket, found {len(stock_files)}")
@@ -181,66 +208,65 @@ def process_bucket(raw_dir: Path = RAW_DIR) -> None:
 
         if missing_cols:
             print(f"Skipping {file_path.name}: missing required columns {missing_cols}")
-            summary_rows.append({
-                "ticker": ticker,
-                "raw_rows": raw_rows,
-                "rows_after_dedup": 0,
-                "duplicate_count": 0,
-                "output_file": "",
-                "min_date": "",
-                "max_date": "",
-                "missing_required_cols": ",".join(missing_cols),
-            })
+            summary_rows.append(
+                {
+                    "ticker": ticker,
+                    "raw_rows": raw_rows,
+                    "rows_after_dedup": 0,
+                    "rows_after_cleaning": 0,
+                    "duplicate_count": 0,
+                    "output_file": "",
+                    "min_date": "",
+                    "max_date": "",
+                    "missing_required_cols": ",".join(missing_cols),
+                }
+            )
             continue
 
-        # Use cleaned ticker consistently.
+        # Preserve the source columns and attach the normalized ticker before FE.
         stock_df["ticker"] = ticker
-
-        # Enforce stable sorting and deduplicate by date.
         stock_df = drop_duplicate_dates(stock_df)
-        rows_after = len(stock_df)
-        duplicate_count = raw_rows - rows_after
+        rows_after_dedup = len(stock_df)
+        duplicate_count = raw_rows - rows_after_dedup
 
-        # Filter to the approved research window before any feature calculations.
-        in_window = stock_df[
+        # Apply the strict research window before any feature calculations.
+        stock_df = stock_df[
             (stock_df["Date"] >= START_DATE) & (stock_df["Date"] <= END_DATE)
-        ]
-        retained_fraction = (len(in_window) / raw_rows) if raw_rows else 0.0
-        if len(in_window) == 0 or retained_fraction < MIN_RETAINED_FRACTION:
+        ].reset_index(drop=True)
+        retained_fraction = (len(stock_df) / raw_rows) if raw_rows else 0.0
+        if len(stock_df) == 0 or retained_fraction < MIN_RETAINED_FRACTION:
             warning_msg = (
-                f"{ticker}: only {len(in_window)} rows remain in 2009-2017 window "
+                f"{ticker}: only {len(stock_df)} rows remain in 2009-2017 window "
                 f"({retained_fraction:.2%} of {raw_rows}); aborting for data quality."
             )
             print(f"ERROR: {warning_msg}")
             raise SystemExit(warning_msg)
-        stock_df = in_window.reset_index(drop=True)
 
-        # Save the cleaned raw data with ticker for bucket-level aggregation later.
         raw_frames.append(stock_df.copy())
 
-        # Engineer Version 2 indicators.
         eng_df = engineer_features(stock_df)
         eng_frames.append(eng_df.copy())
 
-        # Save per-stock engineered output.
-        out_path = ENG_DIR / f"{ticker}_eng_v2.csv"
+        out_path = ENG_DIR / f"{ticker}_eng.csv"
         eng_df.to_csv(out_path, index=False)
 
-        # Collect run summary metadata for this ticker.
         date_series = stock_df["Date"].dropna()
         min_date = date_series.min().date().isoformat() if not date_series.empty else ""
         max_date = date_series.max().date().isoformat() if not date_series.empty else ""
 
-        summary_rows.append({
-            "ticker": ticker,
-            "raw_rows": raw_rows,
-            "rows_after_dedup": rows_after,
-            "duplicate_count": duplicate_count,
-            "output_file": out_path.name,
-            "min_date": min_date,
-            "max_date": max_date,
-            "missing_required_cols": "",
-        })
+        summary_rows.append(
+            {
+                "ticker": ticker,
+                "raw_rows": raw_rows,
+                "rows_after_dedup": rows_after_dedup,
+                "rows_after_cleaning": len(eng_df),
+                "duplicate_count": duplicate_count,
+                "output_file": out_path.name,
+                "min_date": min_date,
+                "max_date": max_date,
+                "missing_required_cols": "",
+            }
+        )
 
     if not eng_frames or not raw_frames:
         print("No valid stock files processed; bucket outputs were not created.")
@@ -248,25 +274,21 @@ def process_bucket(raw_dir: Path = RAW_DIR) -> None:
             pd.DataFrame(summary_rows).to_csv(RUN_SUMMARY_PATH, index=False)
         return
 
-    # Combine raw bucket (vertically) and save.
     bucket_raw = pd.concat(raw_frames, axis=0, ignore_index=True)
     bucket_raw = bucket_raw.sort_values(["ticker", "Date"], kind="mergesort")
     bucket_raw.to_csv(BUCKET_RAW_PATH, index=False)
 
-    # Combine engineered bucket and save.
     bucket_eng = pd.concat(eng_frames, axis=0, ignore_index=True)
     bucket_eng = bucket_eng.sort_values(["ticker", "Date"], kind="mergesort")
     bucket_eng.to_csv(BUCKET_ENG_PATH, index=False)
 
-    # Write run summary for quick inspection.
     pd.DataFrame(summary_rows).to_csv(RUN_SUMMARY_PATH, index=False)
 
-    # Print quick diagnostics for teammates.
-    print("\n=== bucket_top_vol_eng_v2 HEAD ===")
+    print("\n=== bucket_top_vol_eng HEAD ===")
     print(bucket_eng.head())
-    print("\n=== bucket_top_vol_eng_v2 INFO ===")
+    print("\n=== bucket_top_vol_eng INFO ===")
     bucket_eng.info()
-    print("\n=== bucket_top_vol_eng_v2 NaN counts ===")
+    print("\n=== bucket_top_vol_eng NaN counts ===")
     print(bucket_eng.isna().sum())
 
 
