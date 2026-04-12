@@ -129,12 +129,12 @@ def plot_avg_normalized_price_by_sector(
         ax=ax,
     )
     ax.set(
-        title="Average Normalized Price by Sector",
+        title="Average Normalized Price by Category",
         xlabel="Date",
         ylabel="Average Normalized Price",
     )
     ax.grid(alpha=0.25)
-    ax.legend(title="Sector", loc="best")
+    ax.legend(title="Category", loc="best")
     plt.tight_layout()
     plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close()
@@ -160,7 +160,13 @@ def plot_stock_volatility_by_sector(
     if stock_vol_df.empty:
         raise ValueError("No valid volatility values to plot.")
 
-    sectors = stock_vol_df["sector"].unique().tolist()
+    sector_avg = (
+        stock_vol_df.groupby("sector", as_index=False)["volatility"]
+        .mean()
+        .sort_values("volatility", ascending=False)
+    )
+    sectors = sector_avg["sector"].tolist()
+    sector_avg_map = dict(zip(sector_avg["sector"], sector_avg["volatility"]))
     palette_colors = sns.color_palette("Set2", n_colors=len(sectors))
     sector_palette = dict(zip(sectors, palette_colors))
 
@@ -172,7 +178,8 @@ def plot_stock_volatility_by_sector(
 
     x_cursor = 0
     sector_gap = 2
-    for sector, group in stock_vol_df.groupby("sector", sort=False):
+    for sector in sectors:
+        group = stock_vol_df[stock_vol_df["sector"] == sector]
         n_bars = len(group)
         xs = list(range(x_cursor, x_cursor + n_bars))
 
@@ -186,8 +193,8 @@ def plot_stock_volatility_by_sector(
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.bar(x_positions, vol_values, color=bar_colors, width=0.85, alpha=0.9)
 
-    sector_avg = stock_vol_df.groupby("sector")["volatility"].mean()
-    for sector, avg_vol in sector_avg.items():
+    for sector in sectors:
+        avg_vol = sector_avg_map[sector]
         x_start, x_end = sector_ranges[sector]
         ax.hlines(
             y=avg_vol,
@@ -208,8 +215,8 @@ def plot_stock_volatility_by_sector(
     )
 
     ax.set(
-        title="Stock Volatility by Sector (Each Bar = One Stock)",
-        xlabel="Sector",
+        title="Stock Volatility by Category (Each Bar = One Stock)",
+        xlabel="",
         ylabel="Volatility",
     )
     ax.grid(axis="y", alpha=0.2)
