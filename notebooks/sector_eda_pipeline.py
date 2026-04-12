@@ -46,12 +46,16 @@ def compute_window_features(panel_df: pd.DataFrame) -> pd.DataFrame:
    
 
 def load_sector_panel(cfg: BucketEdaConfig) -> pd.DataFrame:
-    # Expected structure: data_dir/<sector_name>/*.csv
-    sector_dirs = sorted([p for p in cfg.data_dir.iterdir() if p.is_dir()])
-    if not sector_dirs:
-        raise FileNotFoundError(f"No sector folders found in {cfg.data_dir}")
+    sector_root = cfg.data_dir / "processed" / "sector_stocks"
+    top_root = cfg.data_dir / "top_volume_stocks"
+    
+    if not sector_root.exists():
+        raise FileNotFoundError(f"Missing folder: {sector_root}")
+    if not top_root.exists():
+        raise FileNotFoundError(f"Missing folder: {top_root}")
 
     frames: List[pd.DataFrame] = []
+    sector_dirs = sorted([p for p in sector_root.iterdir() if p.is_dir()])
     for sector_dir in sector_dirs:
         sector_name = sector_dir.name
         csv_files = list(sector_dir.glob("*.csv"))
@@ -64,7 +68,17 @@ def load_sector_panel(cfg: BucketEdaConfig) -> pd.DataFrame:
             stock_df["sector"] = sector_name
             stock_df["ticker"] = csv_path.stem.upper()
             frames.append(stock_df)
-
+    
+    top_csv_files = sorted(top_root.glob("*.csv"))
+    print(f"Folder {top_root} has {len(top_csv_files)} CSV files.")
+    for csv_path in top_csv_files:
+        stock_df = prepare_stock_data(pd.read_csv(csv_path))
+        if stock_df.empty:
+            continue
+        stock_df["sector"] = "Top Volume Stocks"
+        stock_df["ticker"] = csv_path.stem.upper()
+        frames.append(stock_df)
+    
     if not frames:
         raise ValueError(
             "No usable CSV data found. Check folder structure and required columns Date/Close."
