@@ -1,0 +1,22 @@
+{
+  "metrics": {
+    "mse_log_return": 0.0002875267236959189,
+    "r2_log_return": -0.012187004089355469,
+    "r2_price": 0.999154449577128,
+    "mape_price": 1.0275449084765214,
+    "directional_accuracy": 55.161731207289286,
+    "naive_zero_mse": 0.0002857026702258736,
+    "naive_momentum_mse": 0.0005904174176976085,
+    "naive_momentum_da": 46.8675799086758
+  },
+  "best_xgb_params": {
+    "n_estimators": 982,
+    "max_depth": 8,
+    "learning_rate": 0.001124579825911934,
+    "subsample": 0.9879639408647978,
+    "colsample_bytree": 0.9329770563201687,
+    "min_child_weight": 3,
+    "reg_alpha": 2.8483918709107956e-07,
+    "reg_lambda": 2.9324868872723725e-07
+  }
+}
