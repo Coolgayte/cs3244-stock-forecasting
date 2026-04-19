@@ -11,8 +11,7 @@
 Group leader: XIA TANGZIHAN  
 Mentor: QIHAO LIANG  
 
-
-This repository contains an end-to-end Machine Learning pipeline for forecasting stock market movements. We implement and compare a baseline **XGBoost** model with a sophisticated **Hybrid LSTM-XGBoost** framework to leverage both temporal sequence learning and non-linear gradient boosting.
+This repository contains an end-to-end Machine Learning pipeline for forecasting stock market movements. We implement and compare a baseline **XGBoost** model with a sophisticated **Hybrid LSTM-XGBoost** framework to leverage both temporal sequence learning and non-linear gradient boosting. [GitHub Repo](https://github.com/Coolgayte/cs3244-stock-forecasting)
 
 ---
 
