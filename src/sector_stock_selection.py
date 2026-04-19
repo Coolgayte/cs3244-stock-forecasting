@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_STOCKS_DIR = (
+DEFAULT_PROJECT_STOCKS_DIR = PROJECT_ROOT / "data" / "raw" / "Stocks"
+DEFAULT_KAGGLE_CACHE_DIR = (
     Path.home()
     / ".cache"
     / "kagglehub"
@@ -21,6 +22,13 @@ DEFAULT_STOCKS_DIR = (
 )
 DEFAULT_MAPPING_PATH = PROJECT_ROOT / "data" / "raw" / "stocks_sector_clean_01.csv"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "processed" / "sector_stocks"
+STOCKS_DIR_CANDIDATES = [
+    DEFAULT_PROJECT_STOCKS_DIR,
+    DEFAULT_KAGGLE_CACHE_DIR,
+    PROJECT_ROOT / "data" / "raw" / "stocks",
+    PROJECT_ROOT / "data" / "raw" / "kaggle_raw_stocks",
+    PROJECT_ROOT / "data" / "raw" / "all_stocks",
+]
 
 EXPECTED_COUNTS = {
     "Banks": 23,
@@ -60,8 +68,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stocks-dir",
         type=Path,
-        default=DEFAULT_STOCKS_DIR,
-        help="Path to the Kaggle raw stock files directory.",
+        default=None,
+        help=(
+            "Optional path to the Kaggle raw stock files directory. "
+            "If omitted, the script will try common local locations automatically."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -75,6 +86,31 @@ def parse_args() -> argparse.Namespace:
         help="Remove existing managed sector folders and the missing log before rebuilding.",
     )
     return parser.parse_args()
+
+
+def resolve_stocks_dir(cli_value: Path | None) -> Path:
+    """Find the raw stock folder from CLI input or common local locations."""
+    candidate_paths: list[Path] = []
+    if cli_value is not None:
+        candidate_paths.append(cli_value.expanduser().resolve())
+
+    candidate_paths.extend(path.expanduser().resolve() for path in STOCKS_DIR_CANDIDATES)
+
+    seen: set[Path] = set()
+    for candidate in candidate_paths:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists() and (any(candidate.glob("*.txt")) or any(candidate.glob("*.csv"))):
+            return candidate
+
+    searched = "\n".join(f"- {candidate}" for candidate in seen)
+    raise FileNotFoundError(
+        "Could not find the raw stock directory. Checked:\n"
+        f"{searched}\n\n"
+        "Pass --stocks-dir explicitly, or place the full Kaggle Stocks folder in one of "
+        "the common project data/raw locations."
+    )
 
 
 def load_mapping(mapping_path: Path) -> list[MappingRow]:
@@ -103,7 +139,11 @@ def clean_output_dir(output_dir: Path, sectors: list[str]) -> None:
 
 
 def build_stock_index(stocks_dir: Path) -> dict[str, Path]:
-    return {path.stem.split(".")[0].upper(): path for path in stocks_dir.glob("*.txt")}
+    stock_index: dict[str, Path] = {}
+    for pattern in ("*.txt", "*.csv"):
+        for path in stocks_dir.glob(pattern):
+            stock_index[path.stem.split(".")[0].upper()] = path
+    return stock_index
 
 
 def write_missing_log(missing_path: Path, missing_rows: list[tuple[str, str]]) -> None:
@@ -129,13 +169,11 @@ def validate_results(copied_counts: dict[str, int], missing_rows: list[tuple[str
 def main() -> None:
     args = parse_args()
     mapping_path = args.mapping.expanduser().resolve()
-    stocks_dir = args.stocks_dir.expanduser().resolve()
+    stocks_dir = resolve_stocks_dir(args.stocks_dir)
     output_dir = args.output_dir.expanduser().resolve()
 
     if not mapping_path.exists():
         raise FileNotFoundError(f"Mapping file not found: {mapping_path}")
-    if not stocks_dir.exists():
-        raise FileNotFoundError(f"Stocks directory not found: {stocks_dir}")
 
     mapping_rows = load_mapping(mapping_path)
     sectors = list(dict.fromkeys(row.sector for row in mapping_rows))

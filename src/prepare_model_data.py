@@ -54,8 +54,11 @@ def split_by_target_date(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return {"train": train, "val": val, "test": test}
 
 
+ROLLING_WINDOW = 30
+
+
 def fit_scaler(train_df: pd.DataFrame) -> pd.DataFrame:
-    """Fit simple z-score statistics on the training split only."""
+    """Fit simple z-score statistics on the training split only (saved for reference)."""
     stats = pd.DataFrame(
         {
             "feature": FEATURE_COLS,
@@ -72,6 +75,30 @@ def apply_scaler(df: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
     means = stats.set_index("feature")["mean"]
     stds = stats.set_index("feature")["std"]
     out[FEATURE_COLS] = (out[FEATURE_COLS] - means) / stds
+    return out
+
+
+def apply_rolling_scaler(df: pd.DataFrame, window: int = ROLLING_WINDOW) -> pd.DataFrame:
+    """Normalize features using a per-ticker trailing rolling window.
+
+    Each row is normalized by the mean and std of the preceding `window` rows
+    (inclusive of the current row) for that ticker. Because only past rows are
+    used, there is no look-ahead leakage even across the train/val/test boundary.
+
+    The DataFrame must be sorted by (ticker, Date) before calling.
+    """
+    out = df.copy()
+    for _, grp in out.groupby("ticker", sort=False):
+        idx = grp.index
+        roll_mean = grp[FEATURE_COLS].rolling(window=window, min_periods=1).mean()
+        roll_std = (
+            grp[FEATURE_COLS]
+            .rolling(window=window, min_periods=1)
+            .std(ddof=0)
+            .fillna(1.0)
+            .replace(0.0, 1.0)
+        )
+        out.loc[idx, FEATURE_COLS] = (grp[FEATURE_COLS].values - roll_mean.values) / roll_std.values
     return out
 
 
@@ -111,9 +138,17 @@ def main() -> None:
     # Start from the existing FE output so we do not duplicate feature calculations.
     engineered_df = load_engineered_bucket(ENGINEERED_BUCKET_PATH)
     model_df = add_next_day_target(engineered_df)
-    split_frames = split_by_target_date(model_df)
 
-    # Fit normalization only on the training split, then reuse it for validation and test.
+    # Apply rolling normalization on the full dataset BEFORE splitting so that
+    # val/test rows at the boundary can use their complete 30-row lookback,
+    # which may extend into the training period.  Each row only uses past data,
+    # so no future information leaks across the split boundary.
+    scaled_model_df = apply_rolling_scaler(model_df)
+
+    split_frames = split_by_target_date(model_df)
+    scaled_split_frames = split_by_target_date(scaled_model_df)
+
+    # Save global training stats for reference (not used for actual scaling).
     scaler_stats = fit_scaler(split_frames["train"])
     scaler_stats.to_csv(OUT_DIR / "scaler_stats.csv", index=False)
 
@@ -126,7 +161,8 @@ def main() -> None:
 
         split_df.to_csv(OUT_DIR / f"{split_name}.csv", index=False)
 
-        scaled_df = apply_scaler(split_df, scaler_stats)
+        scaled_df = scaled_split_frames[split_name].sort_values(["ticker", "Date"], kind="mergesort").reset_index(drop=True)
+        scaled_df = scaled_df[ordered_columns]
         scaled_df.to_csv(OUT_DIR / f"{split_name}_scaled.csv", index=False)
 
         split_summary_rows.append(

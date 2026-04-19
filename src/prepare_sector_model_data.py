@@ -11,6 +11,7 @@ from prepare_model_data import (
     RAW_COLS,
     TARGET_COL,
     add_next_day_target,
+    apply_rolling_scaler,
     apply_scaler,
     build_manifest,
     fit_scaler,
@@ -40,7 +41,12 @@ def process_sector_bucket(sector_file: Path, out_root: Path) -> None:
     # Reuse the same target and split logic so comparisons across datasets stay valid.
     engineered_df = load_sector_bucket(sector_file)
     model_df = add_next_day_target(engineered_df)
+
+    # Rolling normalization applied before splitting — see prepare_model_data.py.
+    scaled_model_df = apply_rolling_scaler(model_df)
+
     split_frames = split_by_target_date(model_df)
+    scaled_split_frames = split_by_target_date(scaled_model_df)
 
     scaler_stats = fit_scaler(split_frames["train"])
     scaler_stats.to_csv(sector_out_dir / "scaler_stats.csv", index=False)
@@ -53,7 +59,8 @@ def process_sector_bucket(sector_file: Path, out_root: Path) -> None:
         split_df = split_df[ordered_columns]
         split_df.to_csv(sector_out_dir / f"{split_name}.csv", index=False)
 
-        scaled_df = apply_scaler(split_df, scaler_stats)
+        scaled_df = scaled_split_frames[split_name].sort_values(["ticker", "Date"], kind="mergesort").reset_index(drop=True)
+        scaled_df = scaled_df[ordered_columns]
         scaled_df.to_csv(sector_out_dir / f"{split_name}_scaled.csv", index=False)
 
         split_summary_rows.append(
