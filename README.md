@@ -1,91 +1,112 @@
-# CS3244 Project: Stock Market Forecasting
+# Hybrid LSTM-XGBoost Models for Stock Market Forecasting
+**CS3244 Machine Learning Project | Group 26**
 
-## Group Information
-**Group Number:** 26  
-**Project Title:** Hybrid LSTM-XGBoost Models for Stock Market Forecasting
-
-### Team Members
+## 👥 The Team (Group 26)
 - SIAH JIN THAU
 - XIAO XINKAI
 - XIA TANGZIHAN
 - GUPTA KARTIK
 - NGUYEN MINH GIAP
 
-## Project Overview
-This project investigates machine learning approaches for forecasting stock market movements using historical price and volume data. We aim to compare baseline and advanced models for financial time series prediction, with a focus on combining sequential learning and tabular feature modeling.
-
-Our main proposed approach is a **hybrid LSTM-XGBoost framework**:
-- **LSTM** is used to capture temporal patterns in stock price sequences.
-- **XGBoost** is used to model nonlinear relationships in engineered features and latent representations extracted from the LSTM.
-
-We will compare this hybrid approach against simpler baseline models to evaluate whether the combination improves predictive performance.
-
-## Dataset
-We use the **Huge Stock Market Dataset** provided for the CS3244 project.
-
-### Dataset Description
-The dataset contains historical daily stock prices and trading volumes for U.S. stocks and ETFs listed on:
-- NYSE
-- NASDAQ
-- NYSE MKT
-
-### Features
-Typical columns include:
-- `Date`
-- `Open`
-- `High`
-- `Low`
-- `Close`
-- `Volume`
-- `OpenInt`
-
-## Project Goals
-The goals of this project are:
-1. Preprocess and explore financial time series data.
-2. Engineer useful technical indicators and lag-based features (possibly).
-3. Build and tune different machine learning models for stock prediction such as XGBoost, LSTM+XGBoost, etc.
-4. Evaluate and compare model performance on stock price prediction
-
-## Planned Models (In discussion)
-### Baseline Models
-- Naive / simple baseline
-- Linear Regression
-
-### Advanced Models
-- XGBoost
-- Hybrid LSTM-XGBoost
-
-## Evaluation Metrics (In discussion)
-We plan to evaluate model performance using:
-- **MAPE** (Mean Absolute Percentage Error)
+Group leader: XIA TANGZIHAN  
+Mentor: QIHAO LIANG  
 
 
-## Project Structure
+This repository contains an end-to-end Machine Learning pipeline for forecasting stock market movements. We implement and compare a baseline **XGBoost** model with a sophisticated **Hybrid LSTM-XGBoost** framework to leverage both temporal sequence learning and non-linear gradient boosting.
+
+---
+
+## 🏗 Repository Organization
+
 ```text
 cs3244-stock-forecasting/
-│
 ├── data/
-│   ├── raw/
-│   └── processed/
-│
-├── models/
-│
-├── notebooks/
-│   ├── eda.ipynb
-│   ├── feature_engineering.ipynb
-│
-├── results/
-│   ├── plots/
-│   └── metrics/
-│
-├── src/
-│   ├── preprocessing.py
-│   ├── features.py
-│   ├── train_xgboost.py
-│   ├── train_lstm_xgboost.py
-│   ├── hybrid_model.py
-│   ├── evaluate.py (To Be Considered)
-│
-├── .gitignore
-├── README.md
-└── requirements.txt
+│   ├── raw/                # Historical trade data (Kaggle Huge Stock Market Dataset)
+│   └── processed/          # Sector-organized and model-ready subsets (2009-2017)
+├── EDA/                    # Interpretation reports and automated visualizations
+├── models/                 # Trained model weights (.pt, .pkl) and evaluation reports
+├── notebooks/              # Interactive EDA and pipeline automation scripts
+├── results/                # Quantitative JSON metrics and training/reconstruction plots
+├── src/                    # Core Implementation
+│   ├── features.py             # Feature engineering logic (indicators: RSI, MACD, etc.)
+│   ├── train_lstm_xgboost.py   # Hybrid model pipeline (Latent extraction + XGBoost)
+│   └── visualize_results.py    # Post-training evaluation and plotting
+├── requirements.txt        # Development dependencies
+└── README.md               # Repository Entry Point
+```
+
+---
+
+## 🚀 The E2E ML Pipeline
+
+### 1. Data Processing & Stock Selection
+We utilize the **Huge Stock Market Dataset**, filtering for highly liquid assets across six key sectors: **Banks, Energy, Retail, Shipping, Tech, and Top Volume stocks**. A strict research window from **2009-01-01 to 2017-12-31** is enforced to maintain data quality and consistency.
+
+### 2. Feature Engineering
+We engineered a suite of technical indicators to capture momentum, trend, and volatility:
+- **Momentum**: RSI (14-period), MACD Line & Histogram.
+- **Trend**: EMA (50/200) Ratio.
+- **Volatility**: Bollinger Band Width, Average True Range (ATR).
+- **Volume**: On-Balance Volume (OBV), VWAP.
+
+### 3. Exploratory Data Analysis (EDA)
+Comprehensive analysis of stock dynamics, including:
+- Log-return distributions and stationarity checks.
+- Correlation matrices between indicators and targets.
+- Sector-specific volatility profiles (e.g., Identifying high volatility in the Shipping sector).
+- *Refer to `EDA/Top20_EDA_Interpretation.pdf` for our detailed findings.*
+
+### 4. Modeling Strategies
+
+#### **Model A: Baseline XGBoost**
+- A pure gradient-boosting approach using tabular engineered features.
+- Implements **Bayesian Optimization (via Optuna)** for per-sector hyperparameter tuning.
+- Evaluated on MSE, Directional Accuracy (DA), R-Squared, and MAPE.
+
+#### **Model B: Hybrid LSTM-XGBoost (Proposed)**
+Our advanced architecture combines deep sequential learning with gradient boosting:
+1. **LSTM Encoder**: Processes 30-day sequences of price/volume data. We use **per-window self-normalization** (normalizing OHLC by day-0 values) to handle scale variance.
+2. **Latent Representation**: The hidden state ($h_T$) from the LSTM is extracted as a temporal summary.
+3. **Hybrid Predictor**: The latent vector is concatenated with raw technical indicators and categorical Ticker IDs ($h_T \oplus \text{Indicators} \oplus \text{Ticker}$) and fed into an **Optuna-tuned XGBoost** regressor.
+
+---
+
+## 📊 Evaluation & Results
+We measure performance using:
+- **Test MSE (Log-returns)**: Overall prediction error.
+- **Directional Accuracy (DA)**: Ability to predict the correct "sign" of the move.
+- **MAPE**: Error in reconstructed daily closing prices.
+
+Results are consolidated into PDF reports located in `models/` and JSON metrics in `results/`.
+
+---
+
+## 🛠 Setup & Usage
+
+### ⚙️ Environment Setup
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Coolgayte/cs3244-stock-forecasting.git
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### 🏃 Running the Pipeline
+- **Baseline Training**: Open and run `models/XGBoost_Multi_Sector.ipynb` (optimized for Google Colab/local).
+- **Hybrid Pipeline**: Execute the hybrid training script:
+  ```bash
+  python src/train_lstm_xgboost.py
+  ```
+- **Visualization**: Generate performance plots:
+  ```bash
+  python src/visualize_results.py
+  ```
+
+---
+
+## Declaration
+- This README.md is intended to assist readers' navigation and initial understanding.  
+- This README.md is generated by Gemini.  
+- For more details on our conclusions and findings, please refer to our official report.
