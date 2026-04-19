@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class PlotConfig:
     data_dir: Path = Path("data/top_volume_stocks")
-    output_dir: Path = Path("results/plots")
+    output_dir: Path = Path("EDA/bucket_visualisations")
     processed_dir: Path = Path("data/processed")
     date_col: str = "Date"
     close_col: str = "Close"
@@ -98,7 +98,7 @@ def _save(path: Path, dpi: int) -> None:
 
 def plot_bucket(long_df: pd.DataFrame, returns_wide: pd.DataFrame, cfg: PlotConfig) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Define storage directory
-    bdir = cfg.output_dir / "bucket"
+    bdir = cfg.output_dir 
     
     # Common dates where all tickers exist
     num_tickers = long_df["ticker"].nunique()
@@ -224,8 +224,8 @@ def run_pipeline(cfg: PlotConfig | None = None) -> None:
     log.info("=== BUCKET PLOTS ===")
     long_df_common, returns_common = plot_bucket(long_df, returns_wide, cfg)
     
-    log.info("=== SAVE PROCESSED ===")
-    save_processed(long_df, returns_wide, long_df_common, returns_common, cfg)
+    #log.info("=== SAVE PROCESSED ===")
+    #save_processed(long_df, returns_wide, long_df_common, returns_common, cfg)
     
     log.info(
         "Pipeline complete: 5 bucket = %d plots",
